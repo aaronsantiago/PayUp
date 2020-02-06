@@ -25,12 +25,13 @@ byte gameMode = MODE1;//the default mode when the game begins
 int masterColorIndex = 0;
 int masterValue = 99;
 
-const Color masterColors[3] = { BLUE , YELLOW, ORANGE}; //  RED , GREEN ,  TODO
+const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
 const int masterColorNum = sizeof(masterColors) / sizeof(masterColors[0]);
-const int masterValues[3] = {1, 3, 6};
+const int masterValues[] = {1, 3, 6};
 const int masterValuesNum = sizeof(masterValues) / sizeof(masterValues[0]);
 
-int masterNeighbors[2] = { 9, 9 }; // Used to speed up checking if we received an input so we don't have to check all faces, not sure if necessary.
+int masterNeighbors[6] = { 0, 1, 2, 3, 4, 5 }; // Used to speed up checking if we received an input so we don't have to check all faces, not sure if necessary.
+int neighborNum = sizeof(masterNeighbors) / sizeof(masterNeighbors[0]);
 
 bool isMaster = false;
 
@@ -54,15 +55,15 @@ void masterInit() {
     setColor(RED); // Change the color instantly so that the user knows the master was created. TODO Maybe should flash or rotate or something.
 
     // Determine which two sides are the inputs to master
-    FOREACH_FACE(f) {
-        if (!isValueReceivedOnFaceExpired(f)) {//a neighbor!
-            if (masterNeighbors[0] == 9) {
-                masterNeighbors[0] = f;
-            } else {
-                masterNeighbors[1] = f;
-            }
-        }
-    }
+//    FOREACH_FACE(f) {
+//        if (!isValueReceivedOnFaceExpired(f)) {//a neighbor!
+//            if (masterNeighbors[0] == 9) {
+//                masterNeighbors[0] = f;
+//            } else {
+//                masterNeighbors[1] = f;
+//            }
+//        }
+//    }
 }
 
 void loop() {
@@ -123,7 +124,7 @@ void setMasterResult(int inputFace, bool isCorrect) {
     // Color on side input was received from
     setColorOnFace(inputColor, (inputFace + 1) % 6);
     setColorOnFace(inputColor, inputFace);
-    setColorOnFace(inputColor, (inputFace - 1) % 6);
+    setColorOnFace(inputColor, (inputFace + 5) % 6);
 
     // Color on opposite side
     setColorOnFace(OFF, (inputFace + 2) % 6);
@@ -140,7 +141,6 @@ void resetStoredPattern() {
 }
 
 void displayCombo(Color color, int value) {
-
     if (value >= 1) {
         setColorOnFace(color, 0);
     }
@@ -161,8 +161,8 @@ void masterLoop() {
         }
         
         if (masterColorSwitchTimer.isExpired()) {  // SET NEXT MASTER COLOR
-            masterColorIndex = random(masterColorNum);
-            masterValue = masterValues[random(masterValuesNum)];
+            masterColorIndex = random(masterColorNum - 1);
+            masterValue = masterValues[random(masterValuesNum - 1)];
             // Shift all stored combos in lastElements to the right. TODO put this in a function ?
             for(int i=lastElementsNum-1; i>0; i--)
             {
@@ -183,7 +183,7 @@ void masterLoop() {
     
         //iterate over master's (assumed to be) 2 neighbors
         int neighborIndex = 0;
-        for (neighborIndex; neighborIndex<2; neighborIndex++) {
+        for (neighborIndex; neighborIndex<neighborNum; neighborIndex++) {
             int neighborFace = masterNeighbors[neighborIndex];
             if (getSignalState(getLastValueReceivedOnFace(neighborFace)) == GO) { // Received first player input
                 // Check if valid hit TODO
