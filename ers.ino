@@ -1,10 +1,8 @@
+
 enum signalStates {INERT, GO, RESOLVE};
 byte signalState = INERT;
-
-unsigned long blinkDelayStart;
-unsigned long currentTime;
-//unsigned long delayStart = 0; // Used to control master's pattern switching
 Timer goBroadcast; // Used to control how long you broadcast the go signal, hopefully this helps master pick up signals while it's polling both faces
+bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
 
 Timer masterColorSwitchTimer;
 int masterColorSwitchLengthDefault = 2000;
@@ -17,13 +15,10 @@ Timer winnerDisplayLengthTimer;
 const int winnerDisplayLength = 3000;
 bool clearedWinner = false;
 
-bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
-
-enum gameModes {MODE1, MODE2, MODE3, MASTER_MODE, BECOME_MASTER};//these modes will simply be different colors (editor's note: not quite true anymore)
-byte gameMode = MODE1;//the default mode when the game begins
-
 int masterColorIndex = 0;
 int masterValue = 99;
+
+byte adjacentMasterFace = 6;
 
 const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
 const int masterColorNum = sizeof(masterColors) / sizeof(masterColors[0]);
@@ -36,8 +31,6 @@ int neighborNum = sizeof(masterNeighbors) / sizeof(masterNeighbors[0]);
 bool isMaster = false;
 
 // Stores most recent pattern elements. Most recent is on the left.
-//int lastElements[3] = {99, 99, 99}; // TODO not sure if good initialization. Can't store colors directly because there's no equals operator defined. 
-
 int lastElements[3][2] = { {99,99}, // Color index, number
                            {99,99},
                            {99,99} };
@@ -49,50 +42,21 @@ void setup() {
 }
 
 void masterInit() {
-    gameMode = MASTER_MODE; 
     signalState = RESOLVE; // Don't know if this is the best place for this TODO
 
     setColor(RED); // Change the color instantly so that the user knows the master was created. TODO Maybe should flash or rotate or something.
-
-    // Determine which two sides are the inputs to master
-//    FOREACH_FACE(f) {
-//        if (!isValueReceivedOnFaceExpired(f)) {//a neighbor!
-//            if (masterNeighbors[0] == 9) {
-//                masterNeighbors[0] = f;
-//            } else {
-//                masterNeighbors[1] = f;
-//            }
-//        }
-//    }
 }
 
 void loop() {
+    byte sendData = (signalState << 2);
     if (isMaster) {
+        sendData = sendData + 1; //tell adjacent tiles they are next to the master
         masterLoop();
     } else {
-        switch (signalState) {
-          case INERT:
-            inertLoop();
-            break;
-          case GO:
-            if (runGoBroadcastTimer) { // Make sure timer runs only once
-                goBroadcast.set(200);
-            }
-            if (!goBroadcast.isExpired()) {
-                // Keep broadcasing GO for a time
-                runGoBroadcastTimer = false;
-            } else {
-                goLoop();
-            }
-            break;
-          case RESOLVE:
-            resolveLoop();
-            break;
-        }
+      nonMasterLoop();
     }
     displaySignalState();
   
-    byte sendData = (signalState << 2) + (gameMode);
     setValueSentOnAllFaces(sendData);
   
     if (buttonLongPressed()) {
@@ -111,7 +75,6 @@ bool isValidPattern() {
     if ((lastElements[0][1] == lastElements[1][1]) && (lastElements[0][1] != 99)) { // Check value double
         return true;
     }
-    //for(int i=0; i<lastElementsNum; i++)
 
     return false;
 }
@@ -199,24 +162,35 @@ void masterLoop() {
     
                 winnerDisplayLengthTimer.set(winnerDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
                 clearedWinner = false;
-                
-                // byte becomeMasterPayload = (INERT << 2) + (BECOME_MASTER);
-                
-                //if (isPlayerWin) {
-                //    setValueSentOnFace(becomeMasterPayload, masterNeighbors[ (neighborIndex + 1 % 2) ] );
-                //} else {
-                //    setValueSentOnFace(becomeMasterPayload, neighborFace);
-                //}
-
-                //isMaster = false;
-                
                 break;
             }
         }
-//        if (neighborIndex>=2) { // Fix OFF bug?
-//            displayCombo(masterColors[masterColorIndex], masterValue);
-//        }
     }
+}
+
+void nonMasterLoop() {
+  FOREACH_FACE(f) {
+    checkAdjacentMaster(f);
+  }
+  switch (signalState) {
+    case INERT:
+      inertLoop();
+      break;
+    case GO:
+      if (runGoBroadcastTimer) { // Make sure timer runs only once
+          goBroadcast.set(200);
+      }
+      if (!goBroadcast.isExpired()) {
+          // Keep broadcasing GO for a time
+          runGoBroadcastTimer = false;
+      } else {
+          goLoop();
+      }
+      break;
+    case RESOLVE:
+      resolveLoop();
+      break;
+  }
 }
 
 void inertLoop() {
@@ -225,21 +199,15 @@ void inertLoop() {
   if (buttonDown()) {
     signalState = GO;
     runGoBroadcastTimer = true;
-    //change game mode
-    gameMode = (gameMode + 1) % 3;//adds one to game mode, but 3+1 becomes 0
   }
 
   //listen for neighbors in GO
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f)) {//a neighbor!
+    if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
       if (getSignalState(getLastValueReceivedOnFace(f)) == GO) {//a neighbor saying GO!
+
         signalState = GO;
         runGoBroadcastTimer = true;
-        gameMode = getGameMode(getLastValueReceivedOnFace(f));
-        //if (gameMode == BECOME_MASTER) {
-        //  isMaster = true;
-        //  masterInit();
-        //}
       }
     }
   }
@@ -250,7 +218,7 @@ void goLoop() {
     
     //look for neighbors who have not heard the GO news
     FOREACH_FACE(f) {
-        if (!isValueReceivedOnFaceExpired(f)) {//a neighbor!
+        if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
             if (getSignalState(getLastValueReceivedOnFace(f)) == INERT) {//This neighbor doesn't know it's GO time. Stay in GO
                 signalState = GO;
             }
@@ -263,7 +231,7 @@ void resolveLoop() {
 
   //look for neighbors who have not moved to RESOLVE
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f)) {//a neighbor!
+    if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
       if (getSignalState(getLastValueReceivedOnFace(f)) == GO) {//This neighbor isn't in RESOLVE. Stay in RESOLVE
         signalState = RESOLVE;
       }
@@ -271,24 +239,32 @@ void resolveLoop() {
   }
 }
 
+bool shouldConsiderFace(byte f) { //if adjacent to master, should I prop signals to this face?
+  if (adjacentMasterFace == 6) return true;
+
+  if (f == adjacentMasterFace
+   || f == (adjacentMasterFace + 2) % 6
+   || f == (adjacentMasterFace + 3) % 6
+   || f == (adjacentMasterFace + 4) % 6) {
+    return true;
+  }
+  return false;
+}
+
+void checkAdjacentMaster(byte f) {
+  // if connected and                          is adjacent master
+  if (!isValueReceivedOnFaceExpired(f) && (getLastValueReceivedOnFace(f) & 1) == 1) {
+    adjacentMasterFace = f;
+  }
+  else if (adjacentMasterFace == f) { //reset if signal is not from master when it is supposed to be
+    adjacentMasterFace = 6;
+  }
+}
+
 void displaySignalState() {
   switch (signalState) {
     case INERT:
-      switch (gameMode) {
-        case MODE1:
-          setColor(OFF);
-          break;
-        case MODE2:
-          setColor(OFF);
-          break;
-        case MODE3:  // TODO remove these
-          setColor(OFF); 
-          break;
-//
-////        case MASTER_MODE:
-////          setColor(CYAN);
-////          break;
-      }
+      setColor(OFF);
       break;
     case GO:
       setColor(MAGENTA);
@@ -298,10 +274,6 @@ void displaySignalState() {
       }
       break;
   }
-}
-
-byte getGameMode(byte data) {
-  return (data & 3);//returns bits E and F
 }
 
 byte getSignalState(byte data) {
