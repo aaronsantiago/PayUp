@@ -40,6 +40,9 @@ byte numPlayers = 0;
 byte currentRank = 0;
 
 byte currentPlayerColor = 0;
+
+bool hasLonePieceActivate = false;
+int lonePieceActivationChance = 500;
                     
 const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 
@@ -54,23 +57,43 @@ void masterInit() {
 }
 
 void loop() {
-    byte sendData = (signalState << 1) + (currentPlayerColor << 3);
-    if (isMaster) {
-        sendData = sendData + 1; //tell adjacent tiles they are next to the master
-        masterLoop();
-    } else {
-      nonMasterLoop();
-    }
-    displaySignalState();
-  
-    setValueSentOnAllFaces(sendData);
-    if (isMaster) setSendValuesByRanking();
-  
-    if (buttonLongPressed()) {
-        isMaster = !isMaster;
-        if (isMaster) {
-            masterInit();
+
+    bool isFaceConnected = false;
+    FOREACH_FACE(f) {
+      if (!isValueReceivedOnFaceExpired(f))
+        {
+          isFaceConnected = true;
+          break;
         }
+    }
+    if (!isFaceConnected && !isMaster) {
+      if (random(lonePieceActivationChance) == 0) {
+        hasLonePieceActivate = true;
+      }
+      if (hasLonePieceActivate) {
+        setColor(WHITE);
+      }
+    }
+    else {
+      hasLonePieceActivate = false;
+      byte sendData = (signalState << 1) + (currentPlayerColor << 3);
+      if (isMaster) {
+          sendData = sendData + 1; //tell adjacent tiles they are next to the master
+          masterLoop();
+      } else {
+        nonMasterLoop();
+      }
+      displaySignalState();
+    
+      setValueSentOnAllFaces(sendData);
+      if (isMaster) setSendValuesByRanking();
+    
+      if (buttonLongPressed()) {
+          isMaster = !isMaster;
+          if (isMaster) {
+              masterInit();
+          }
+      }
     }
 }
 
@@ -220,7 +243,7 @@ void setSendValuesByRanking() {
         }
       }
       else {
-        setValueSentOnFace((RESOLVE << 1) + 1, f); // forces player blinks to stay in resolve mode
+        setValueSentOnFace((RESOLVE << 1) + 1, f);
       }
     }
   }
@@ -235,7 +258,7 @@ void setSendValuesByRanking() {
         }
       }
       else {
-        setValueSentOnFace((RESOLVE << 1) + 1, f); // forces player blinks to stay in resolve mode
+        setValueSentOnFace((RESOLVE << 1) + 1, f);
       }
     }
   }
