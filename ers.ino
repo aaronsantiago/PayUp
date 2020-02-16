@@ -12,7 +12,9 @@ int masterColorSwitchLength = masterColorSwitchLengthDefault; // Slowly decrease
 #define OFF_DURATION 100
 
 Timer winnerDisplayLengthTimer;
-const int winnerDisplayLength = 3000;
+const int winnerDisplayLength = 2000;
+int lonePieceActivationMin = 2000;
+int lonePieceActivationMax = 15000;
 bool clearedWinner = false;
 byte spoonsMode = 0; //0 = none; 1 = winners; 2 = losers;
 
@@ -42,8 +44,6 @@ byte currentRank = 0;
 byte currentPlayerColor = 0;
 
 bool hasLonePieceActivate = false;
-int lonePieceActivationMin = 2000;
-int lonePieceActivationMax = 20000;
 Timer lonePieceActivationTimer;
                     
 const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
