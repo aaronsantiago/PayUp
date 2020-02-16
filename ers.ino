@@ -5,7 +5,8 @@ Timer goBroadcast; // Used to control how long you broadcast the go signal, hope
 bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
 
 Timer masterColorSwitchTimer;
-int masterColorSwitchLengthDefault = 1500;
+// int masterColorSwitchLengthDefault = 1500;
+int masterColorSwitchLengthDefault = 750;
 int masterColorSwitchDelta = 0;
 int masterColorSwitchLength = masterColorSwitchLengthDefault; // Slowly decrease
 
@@ -13,8 +14,8 @@ int masterColorSwitchLength = masterColorSwitchLengthDefault; // Slowly decrease
 
 Timer winnerDisplayLengthTimer;
 const int winnerDisplayLength = 2000;
-int lonePieceActivationMin = 2000;
-int lonePieceActivationMax = 15000;
+int lonePieceActivationMin = 1000;
+int lonePieceActivationMax = 8000;
 bool clearedWinner = false;
 byte spoonsMode = 0; //0 = none; 1 = winners; 2 = losers;
 
@@ -68,7 +69,8 @@ void loop() {
           break;
         }
     }
-    if (!isFaceConnected && !isMaster) {
+    if (!isFaceConnected && !isMaster) { /// lone piece loop
+      buttonPressed();
       if (lonePieceActivationTimer.isExpired()) {
         hasLonePieceActivate = true;
       }
@@ -113,19 +115,23 @@ bool isValidPattern() {
 }
 
 void setMasterResult(int inputFace, bool isCorrect) {
-    Color inputColor = GREEN; // TODO Maybe CYAN
-    if (!isCorrect) {
-        inputColor = RED;
+    // TODO 2/15 Commented out because it's spoons mode
+    FOREACH_FACE(f) {
+      setColorOnFace(masterColors[random(masterColorNum - 1)], f);
     }
-    // Color on side input was received from
-    setColorOnFace(inputColor, (inputFace + 1) % 6);
-    setColorOnFace(inputColor, inputFace);
-    setColorOnFace(inputColor, (inputFace + 5) % 6);
+    // // Color inputColor = GREEN; // TODO Maybe CYAN 
+    // if (!isCorrect) {
+    //     inputColor = RED;
+    // }
+    // // Color on side input was received from
+    // setColorOnFace(inputColor, (inputFace + 1) % 6);
+    // setColorOnFace(inputColor, inputFace);
+    // setColorOnFace(inputColor, (inputFace + 5) % 6);
 
-    // Color on opposite side
-    setColorOnFace(OFF, (inputFace + 2) % 6);
-    setColorOnFace(OFF, (inputFace + 3) % 6);
-    setColorOnFace(OFF, (inputFace + 4) % 6);
+    // // Color on opposite side
+    // setColorOnFace(OFF, (inputFace + 2) % 6);
+    // setColorOnFace(OFF, (inputFace + 3) % 6);
+    // setColorOnFace(OFF, (inputFace + 4) % 6);
 }
 
 // Sets the stored pattern to 99 (init val)
@@ -188,8 +194,11 @@ void masterLoop() {
         currentRank = 1;
         numPlayers = 0;
         for (int i = 0; i < 6; i++) {
-          playerRanks[i] = 6;
-          if (!isValueReceivedOnFaceExpired(i)) numPlayers++;
+          playerRanks[i] = 7;
+          if (!isValueReceivedOnFaceExpired(i)) {
+            numPlayers++;
+            playerRanks[i] = 6;
+          }
           if (i == f) {
             playerRanks[i] = 0;
           }
@@ -214,14 +223,24 @@ void masterLoop() {
     }
   } //winner logic
   else if (currentRank < numPlayers) {
+    byte lastPlayerRemaining = 6;
+    byte playersRemaining = 0;
+    FOREACH_FACE(f) {
+      if (playerRanks[f] == 6) {
+        if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO) { // Received next player input
+            playerRanks[f] = currentRank++;
+        }
+        else {
+          playersRemaining++;
+          lastPlayerRemaining = f;
+        }
+      }
+    }
+
     if (spoonsMode == 1) {
       winnerDisplayLengthTimer.set(winnerDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
-    }
-    FOREACH_FACE(f) {
-      if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO) { // Received next player input
-        if (playerRanks[f] == 6) {
-          playerRanks[f] = currentRank++;
-        }
+      if (playersRemaining == 1) {
+        playerRanks[lastPlayerRemaining] = currentRank++;
       }
     }
   }
@@ -276,6 +295,7 @@ void nonMasterLoop() {
       inertLoop();
       break;
     case GO:
+      buttonPressed();
       if (runGoBroadcastTimer) { // Make sure timer runs only once
           goBroadcast.set(200);
       }
@@ -287,6 +307,7 @@ void nonMasterLoop() {
       }
       break;
     case RESOLVE:
+      buttonPressed();
       resolveLoop();
       break;
   }
@@ -296,7 +317,7 @@ void inertLoop() {
   //set myself to GO
 //  if (buttonSingleClicked()) {
   currentPlayerColor = 0;
-  if (buttonDown()) {
+  if (buttonPressed()) {
     signalState = GO;
     runGoBroadcastTimer = true;
   }
