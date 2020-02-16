@@ -5,7 +5,7 @@ Timer goBroadcast; // Used to control how long you broadcast the go signal, hope
 bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
 
 Timer masterColorSwitchTimer;
-int masterColorSwitchLengthDefault = 2000;
+int masterColorSwitchLengthDefault = 1500;
 int masterColorSwitchDelta = 0;
 int masterColorSwitchLength = masterColorSwitchLengthDefault; // Slowly decrease
 
@@ -42,7 +42,9 @@ byte currentRank = 0;
 byte currentPlayerColor = 0;
 
 bool hasLonePieceActivate = false;
-int lonePieceActivationChance = 500;
+int lonePieceActivationMin = 2000;
+int lonePieceActivationMax = 20000;
+Timer lonePieceActivationTimer;
                     
 const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 
@@ -67,7 +69,7 @@ void loop() {
         }
     }
     if (!isFaceConnected && !isMaster) {
-      if (random(lonePieceActivationChance) == 0) {
+      if (lonePieceActivationTimer.isExpired()) {
         hasLonePieceActivate = true;
       }
       if (hasLonePieceActivate) {
@@ -76,6 +78,7 @@ void loop() {
     }
     else {
       hasLonePieceActivate = false;
+      lonePieceActivationTimer.set(lonePieceActivationMin + random(lonePieceActivationMax - lonePieceActivationMin));
       byte sendData = (signalState << 1) + (currentPlayerColor << 3);
       if (isMaster) {
           sendData = sendData + 1; //tell adjacent tiles they are next to the master
