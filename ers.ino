@@ -48,6 +48,7 @@ const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 byte sendData = 1;
 Timer sharedTimer;
 const int masterResultDisplayLength = 2000;
+const int winnerPendingWaitLength = 5000;
 const int pipeDisplayLength = 100;
 const int inputDisplayLength = 1000;
 
@@ -317,6 +318,7 @@ void msSpinner() {
         }
         if (isPlayerWin) {
           masterState = MS_SPOONS_STATE;
+          sharedTimer.set(winnerPendingWaitLength);
         }
         else {
           masterState = MS_LOSER_STATE;
@@ -366,14 +368,24 @@ void updateSpoonsSignals() {
 void msSpoons() {
   byte lastPlayerRemaining = 6;
   byte playersRemaining = 0;
-  FOREACH_FACE(f) {
-    if (playerRanks[f] == 6) {
-      if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO) { // Received next player input
-          playerRanks[f] = masterNextRankToAssign++;
+  if (!sharedTimer.isExpired()) {
+    FOREACH_FACE(f) {
+      if (playerRanks[f] == 6) {
+        if (isValueReceivedOnFaceExpired(f) || getSignalState(getLastValueReceivedOnFace(f)) == GO) { // Received next player input
+            playerRanks[f] = masterNextRankToAssign++;
+            sharedTimer.set(winnerPendingWaitLength);
+        }
+        else {
+          playersRemaining++;
+          lastPlayerRemaining = f;
+        }
       }
-      else {
-        playersRemaining++;
-        lastPlayerRemaining = f;
+    }
+  }
+  else { // if nobody finishes the round after some time
+    FOREACH_FACE(f) {
+      if (playerRanks[f] == 6) {
+        playerRanks[f] = numPlayersAtInputTime - 1;
       }
     }
   }
