@@ -5,39 +5,37 @@ Timer goBroadcast; // Used to control how long you broadcast the go signal, hope
 bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
 
 Timer masterColorSwitchTimer;
-int masterColorSwitchLengthDefault = 1200;
-int masterColorSwitchDelta = 0;
+const int masterColorSwitchLengthDefault = 1200;
+const int masterColorSwitchDelta = 0;
 int masterColorSwitchLength = masterColorSwitchLengthDefault; // Slowly decrease
+const int masterColorSwitchGapLength = 100; // Dark time in between color switches
 
-#define OFF_DURATION 100
+const int lonePieceActivationMin = 1000;
+const int lonePieceActivationMax = 8000;
 
-int lonePieceActivationMin = 1000;
-int lonePieceActivationMax = 8000;
-
-int masterColorIndex = 0;
-int masterValue = 99;
+byte masterColorIndex = 0;
+byte masterValue = 99;
 
 byte adjacentMasterFace = 6;
 
 enum playerRankValues {RANK_NONE, RANK_LOSE, RANK_MID, RANK_WIN};
-const Color playerColors[] = {WHITE, RED, YELLOW, GREEN};
-const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
-const int masterColorNum = sizeof(masterColors) / sizeof(masterColors[0]);
-const int masterValues[] = {1, 3, 6};
-const int masterValuesNum = sizeof(masterValues) / sizeof(masterValues[0]);
+const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN};
 
-bool isMaster = false;
+const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
+const byte masterColorNum = sizeof(masterColors) / sizeof(masterColors[0]);
+const byte masterValues[] = {1, 3, 6};
+const byte masterValuesNum = sizeof(masterValues) / sizeof(masterValues[0]);
 
 // Stores most recent pattern elements. Most recent is on the left.
-int lastElements[3][2] = { {99,99}, // Color index, number
+byte lastElements[3][2] = { {99,99}, // Color index, number
                            {99,99},
                            {99,99} };
 
 byte playerRanks[] = {6,6,6,6,6,6};
-byte numPlayers = 0;
-byte currentRank = 0;
+byte numPlayersAtInputTime = 0;
+byte masterNextRankToAssign = 0;
 
-byte currentPlayerColor = 0;
+byte currentPlayerRank = 0;
                     
 const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 
@@ -47,14 +45,10 @@ const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 
 
 byte sendData = 1;
-Timer masterResultDisplayTimer;
-Timer pipeDisplayTimer;
-Timer aloneActivateTimer;
-Timer leafDisplayTimer;
-Timer inputDisplayTimer;
+Timer sharedTimer;
 const int masterResultDisplayLength = 2000;
-const int pipeDisplayTimerLength = 100;
-const int inputDisplayTimerLength = 1000;
+const int pipeDisplayLength = 100;
+const int inputDisplayLength = 1000;
 
 enum overallStateValues {OS_PLAYER_STATE, OS_MASTER_STATE, OS_LEAF_STATE, OS_ALONE_STATE, OS_PIPE_STATE};
 byte overallState = OS_PLAYER_STATE;
@@ -93,6 +87,11 @@ void loop() {
   }
 }
 
+// *****************************************************************
+// ******* NON-MASTER HELPERS **************************************
+// *****************************************************************
+
+
 void osPlayer() {
   byte connectedFaces = 0;
   FOREACH_FACE(f) {
@@ -104,7 +103,7 @@ void osPlayer() {
   if (connectedFaces == 0 && overallState != OS_ALONE_STATE) {
     overallState = OS_ALONE_STATE;
     aloneState = 0; // reset alone state machine
-    aloneActivateTimer.set(lonePieceActivationMin + random(lonePieceActivationMax - lonePieceActivationMin));
+    sharedTimer.set(lonePieceActivationMin + random(lonePieceActivationMax - lonePieceActivationMin));
   }
   if (connectedFaces == 1 && overallState != OS_LEAF_STATE) {
     overallState = OS_LEAF_STATE;
@@ -129,6 +128,11 @@ void nonSpinnerStateChecks() {
   }
 }
 
+// *****************************************************************
+// ******* LEAF STATE **********************************************
+// *****************************************************************
+
+
 void osLeaf() {
   nonSpinnerStateChecks();
   if (overallState != OS_LEAF_STATE) return;
@@ -152,15 +156,15 @@ void lsIdle() {
   if (buttonPressed()) {
     leafState = LS_INPUT_STATE;
     signalState = GO;
-    currentPlayerColor = RANK_NONE;
-    inputDisplayTimer.set(inputDisplayTimerLength);
+    currentPlayerRank = RANK_NONE;
+    sharedTimer.set(inputDisplayLength);
     return;
   }
-  setColor(playerColors[currentPlayerColor]);
+  setColor(playerRankColors[currentPlayerRank]);
 }
 
 void lsInput() {
-  if (inputDisplayTimer.isExpired()) {
+  if (sharedTimer.isExpired()) {
     leafState = LS_IDLE_STATE;
     return;
   }
@@ -174,6 +178,10 @@ void lsWinner() {
 void lsLoser() {
 
 }
+
+// *****************************************************************
+// ******* ALONE STATE *********************************************
+// *****************************************************************
 
 void osAlone() {
   nonSpinnerStateChecks();
@@ -189,7 +197,7 @@ void osAlone() {
 }
 
 void asIdle() {
-  if (aloneActivateTimer.isExpired()) {
+  if (sharedTimer.isExpired()) {
     aloneState = AS_ACTIVE_STATE;
     return;
   }
@@ -199,6 +207,11 @@ void asIdle() {
 void asActive() {
   setColor(WHITE);
 }
+
+// *****************************************************************
+// ******* PIPE STATE **********************************************
+// *****************************************************************
+
 
 void osPipe() {
   nonSpinnerStateChecks();
@@ -216,19 +229,23 @@ void osPipe() {
 void psIdle() {
   if (signalState == GO) {
     pipeState = PS_ANIM_STATE;
-    pipeDisplayTimer.set(pipeDisplayTimerLength);
+    sharedTimer.set(pipeDisplayLength);
     return;
   }
   setColor(OFF);
 }
 
 void psAnim() {
-  if (pipeDisplayTimer.isExpired()) {
+  if (sharedTimer.isExpired()) {
     pipeState = PS_IDLE_STATE;
     return;
   }
-  setColor(playerColors[currentPlayerColor]);
+  setColor(playerRankColors[currentPlayerRank]);
 }
+
+// *****************************************************************
+// ******* MASTER STATE ********************************************
+// *****************************************************************
 
 void osMaster() {
   if (buttonLongPressed()) {
@@ -257,7 +274,7 @@ void msSpinner() {
       masterColorIndex = random(masterColorNum - 1);
       masterValue = masterValues[random(masterValuesNum - 1)];
       // Shift all stored combos in lastElements to the right. TODO put this in a function ?
-      for(int i=lastElementsNum-1; i>0; i--)
+      for(byte i=lastElementsNum-1; i>0; i--)
       {
           lastElements[i][0] = lastElements[i-1][0];
           lastElements[i][1] = lastElements[i-1][1];
@@ -270,7 +287,7 @@ void msSpinner() {
 
       masterColorSwitchLength = masterColorSwitchLength - masterColorSwitchDelta; // Slowly decrease
       
-  } else if (masterColorSwitchTimer.getRemaining() < OFF_DURATION) { // Blink off for a bit
+  } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
       setColor(OFF);
   } 
 
@@ -283,12 +300,12 @@ void msSpinner() {
         bool isPlayerWin = isValidPattern();
 
         // initialize ranking system
-        currentRank = 1;
-        numPlayers = 0;
-        for (int i = 0; i < 6; i++) {
+        masterNextRankToAssign = 1;
+        numPlayersAtInputTime = 0;
+        for (byte i = 0; i < 6; i++) {
           playerRanks[i] = 7;
           if (!isValueReceivedOnFaceExpired(i)) {
-            numPlayers++;
+            numPlayersAtInputTime++;
             playerRanks[i] = 6;
           }
           if (i == f) {
@@ -300,7 +317,7 @@ void msSpinner() {
         }
         else {
           masterState = MS_LOSER_STATE;
-          masterResultDisplayTimer.set(masterResultDisplayLength);
+          sharedTimer.set(masterResultDisplayLength);
         }
 
         masterColorSwitchLength = masterColorSwitchLengthDefault; // reset switch length
@@ -325,11 +342,11 @@ void updateSpoonsSignals() {
         sendVal = sendVal + (RANK_WIN << 3);
         setValueSentOnFace(sendVal, f);
       }
-      else if (playerRanks[f] < numPlayers - 1) {
+      else if (playerRanks[f] < numPlayersAtInputTime - 1) {
         sendVal = sendVal + (RANK_MID << 3);
         setValueSentOnFace(sendVal, f);
       }
-      else if (playerRanks[f] == numPlayers - 1) {
+      else if (playerRanks[f] == numPlayersAtInputTime - 1) {
         sendVal = sendVal + (RANK_LOSE << 3);
         setValueSentOnFace(sendVal, f);
       }
@@ -349,7 +366,7 @@ void msSpoons() {
   FOREACH_FACE(f) {
     if (playerRanks[f] == 6) {
       if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO) { // Received next player input
-          playerRanks[f] = currentRank++;
+          playerRanks[f] = masterNextRankToAssign++;
       }
       else {
         playersRemaining++;
@@ -359,11 +376,11 @@ void msSpoons() {
   }
 
   if (playersRemaining == 1) {
-    playerRanks[lastPlayerRemaining] = currentRank++;
+    playerRanks[lastPlayerRemaining] = masterNextRankToAssign++;
     playersRemaining--;
   }
   if (playersRemaining == 0) {
-    masterResultDisplayTimer.set(masterResultDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
+    sharedTimer.set(masterResultDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
     masterState = MS_WINNER_STATE;
   }
   setColor(OFF);
@@ -371,7 +388,7 @@ void msSpoons() {
 }
 
 void msWinner() {
-  if (masterResultDisplayTimer.isExpired()) {
+  if (sharedTimer.isExpired()) {
     masterState = MS_SPINNER_STATE;
     return;
   }
@@ -382,7 +399,7 @@ void msWinner() {
 }
 
 void msLoser() {
-  if (masterResultDisplayTimer.isExpired()) {
+  if (sharedTimer.isExpired()) {
     masterState = MS_SPINNER_STATE;
     return;
   }
@@ -414,13 +431,13 @@ bool isValidPattern() {
 
 // Sets the stored pattern to 99 (init val)
 void resetStoredPattern() {
-    for (int i=0; i<lastElementsNum; i++) {
+    for (byte i=0; i<lastElementsNum; i++) {
         lastElements[i][0] = 99;
         lastElements[i][1] = 99;
     }
 }
 
-void displayCombo(Color color, int value) {
+void displayCombo(Color color, byte value) {
     if (value >= 1) {
         setColorOnFace(color, 0);
     }
@@ -432,13 +449,9 @@ void displayCombo(Color color, int value) {
     }
 }
 
-void masterLoop() {
-  if (masterResultDisplayTimer.isExpired()) { // This timer controls how long we display the winning state, prevents reading new inputs
-    
-  } //winner logic
-  else if (currentRank < numPlayers) {
-  }
-}
+// *****************************************************************
+// ******* SIGNAL PROPAGATION **************************************
+// *****************************************************************
 
 void updateSignalPropagation() {
   switch (signalState) {
@@ -460,15 +473,15 @@ void updateSignalPropagation() {
       resolveLoop();
       break;
   }
-  sendData = (signalState << 1) + (currentPlayerColor << 3);
+  sendData = (signalState << 1) + (currentPlayerRank << 3);
   if (overallState == OS_MASTER_STATE) sendData += 1;
   setValueSentOnAllFaces(sendData);
 }
 
 // make color commands propagate regardless of state, reset when signal state is INERT
 void comparePlayerColor(byte c) {
-  if (c > currentPlayerColor) {
-    currentPlayerColor = c;
+  if (c > currentPlayerRank) {
+    currentPlayerRank = c;
   }
 }
 
@@ -486,7 +499,7 @@ bool shouldConsiderFace(byte f) { //if adjacent to master, should I prop signals
 
 void inertLoop() {
   // when inert, default win metadata to 0
-  currentPlayerColor = 0;
+  currentPlayerRank = 0;
 
   //listen for neighbors in GO
   FOREACH_FACE(f) {
@@ -538,21 +551,6 @@ void updateAdjacentMasters() {
     else if (adjacentMasterFace == f) {
       adjacentMasterFace = 6;
     }
-  }
-}
-
-void displaySignalState() {
-  switch (signalState) {
-    case INERT:
-      setColor(OFF);
-      break;
-    case GO:
-      setColor(playerColors[currentPlayerColor]);
-    case RESOLVE:
-      if (!isMaster) {
-        setColor(playerColors[currentPlayerColor]);
-      }
-      break;
   }
 }
 
