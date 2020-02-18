@@ -424,6 +424,10 @@ void msLoser() {
         && playerRanks[f] < 6) {
       setValueSentOnFace((RANK_LOSE << 3) + (GO << 1) + 1, f);
     }
+    else if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO && playerRanks[f] == 6) {
+      playerRanks[f] = 0;
+      sharedTimer.set(masterResultDisplayLength);
+    }
     else {
       setValueSentOnFace((RESOLVE << 1) + 1, f);
     }
