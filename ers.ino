@@ -312,15 +312,14 @@ void msSpinner() {
             numPlayersAtInputTime++;
             playerRanks[i] = 6;
           }
-          if (i == f) {
-            playerRanks[i] = 0;
-          }
         }
         if (isPlayerWin) {
+          playerRanks[f] = 0;
           masterState = MS_SPOONS_STATE;
           sharedTimer.set(winnerPendingWaitLength);
         }
         else {
+          playerRanks[f] = numPlayersAtInputTime - 1;
           masterState = MS_LOSER_STATE;
           sharedTimer.set(masterResultDisplayLength);
         }
@@ -419,20 +418,14 @@ void msLoser() {
     return;
   }
   FOREACH_FACE(f) {
-    if(!isValueReceivedOnFaceExpired(f)
-        && getSignalState(getLastValueReceivedOnFace(f)) != RESOLVE
-        && playerRanks[f] < 6) {
-      setValueSentOnFace((RANK_LOSE << 3) + (GO << 1) + 1, f);
-    }
-    else if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO && playerRanks[f] == 6) {
-      playerRanks[f] = 0;
+    if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO && playerRanks[f] == 6) {
+      playerRanks[f] = numPlayersAtInputTime - 1;
       sharedTimer.set(masterResultDisplayLength);
-    }
-    else {
       setValueSentOnFace((RESOLVE << 1) + 1, f);
     }
   }
   setColor(OFF);
+  updateSpoonsSignals();
 }
 
 
