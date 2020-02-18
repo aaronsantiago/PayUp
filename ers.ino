@@ -1,5 +1,5 @@
 
-enum signalStates {INERT, GO, RESOLVE};
+enum signalStates {INERT, GO, RESOLVE, PING};
 byte signalState = INERT;
 Timer goBroadcast; // Used to control how long you broadcast the go signal, hopefully this helps master pick up signals while it's polling both faces
 bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
@@ -108,6 +108,7 @@ void osPlayer() {
   if (connectedFaces == 1 && overallState != OS_LEAF_STATE) {
     overallState = OS_LEAF_STATE;
     leafState = 0; // reset leaf state machine
+    buttonPressed(); // reset button press checker before going into leaf state
   }
   if (connectedFaces > 1 && overallState != OS_PIPE_STATE) {
     overallState = OS_PIPE_STATE;
@@ -166,6 +167,7 @@ void lsIdle() {
 void lsInput() {
   if (sharedTimer.isExpired()) {
     leafState = LS_IDLE_STATE;
+    buttonPressed(); // reset button pressed state before going back to idle
     return;
   }
   setColor(OFF);
