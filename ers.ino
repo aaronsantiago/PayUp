@@ -2,6 +2,7 @@
 enum signalStates {INERT, GO, RESOLVE, PING};
 byte signalState = INERT;
 Timer goBroadcast; // Used to control how long you broadcast the go signal, hopefully this helps master pick up signals while it's polling both faces
+const byte goBroadcastLength = 50;
 bool runGoBroadcastTimer = false; // true if still waiting for delay to finish
 
 Timer masterColorSwitchTimer;
@@ -462,7 +463,7 @@ void updateSignalPropagation() {
       break;
     case GO:
       if (runGoBroadcastTimer) { // Make sure timer runs only once
-          goBroadcast.set(200);
+          goBroadcast.set(goBroadcastLength);
       }
       if (!goBroadcast.isExpired()) {
           // Keep broadcasing GO for a time
