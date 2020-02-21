@@ -134,9 +134,9 @@ void osDead() {
 void osPlayer() {
   byte connectedFaces = 0;
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f))
+    if (shouldConsiderFace(f))
     {
-      connectedFaces++;
+      ++connectedFaces;
     }
   }
   if (connectedFaces == 0 && overallState != OS_ALONE_STATE) {
@@ -159,7 +159,7 @@ void osPlayer() {
 
 void pipeRender(int b) {
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f)) setColorOnFace(dim(WHITE, b), f);
+    if (shouldConsiderFace(f)) setColorOnFace(dim(WHITE, b), f);
   }
 }
 
@@ -289,7 +289,7 @@ void psAnim() {
   }
   pipeAnimRender();
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f)) {
+    if (shouldConsiderFace(f)) {
       setColorOnFace(playerRankColors[currentPlayerRankCache], f);
       if (f != goSignalRecievedFromFace && !sharedAnimationTimer.isExpired()) {
         setColorOnFace(dim(WHITE, 128), f);
@@ -333,7 +333,7 @@ void msSetup() {
   }
   if (sharedTimer.getRemaining() > masterSetupDontSendGoLength) {
     FOREACH_FACE(f) {
-      if(!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) != RESOLVE) {
+      if(!isValueReceivedOnFaceExpired(f) && getSignalState(f) != RESOLVE) {
         setValueSentOnFace((RANK_RESET << 3) + (GO << 1) + 1, f);
       }
       else {
@@ -350,7 +350,7 @@ void msSpinner() {
       masterColorIndex = random(masterColorNum - 1);
       masterValue = masterValues[random(masterValuesNum - 1)];
       // Shift all stored combos in lastElements to the right. TODO put this in a function ?
-      for(byte i=lastElementsNum-1; i>0; i--)
+      for(byte i=lastElementsNum-1; i>0; --i)
       {
           lastElements[i][0] = lastElements[i-1][0];
           lastElements[i][1] = lastElements[i-1][1];
@@ -370,8 +370,8 @@ void msSpinner() {
 
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f)
-        && getSignalState(getLastValueReceivedOnFace(f)) == GO) {
-      if (getColorState(getLastValueReceivedOnFace(f)) == RANK_NONE) {
+        && getSignalState(f) == GO) {
+      if (getColorState(f) == RANK_NONE) {
           // Received first player input
 
         // initialize ranking system
@@ -380,7 +380,7 @@ void msSpinner() {
         FOREACH_FACE(i) {
           playerRanks[i] = 7;
           if (!isValueReceivedOnFaceExpired(i)) {
-            numPlayersAtInputTime++;
+            ++numPlayersAtInputTime;
             playerRanks[i] = 6;
           }
         }
@@ -410,7 +410,7 @@ void msSpinner() {
 void updateSpoonsSignals() {
   FOREACH_FACE(f) {
     byte sendVal = (GO << 1) + 1;
-    if(!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) != RESOLVE) {
+    if(!isValueReceivedOnFaceExpired(f) && getSignalState(f) != RESOLVE) {
       if (playerRanks[f] == 0) {
         sendVal = sendVal + (RANK_WIN << 3);
         setValueSentOnFace(sendVal, f);
@@ -439,12 +439,12 @@ void msSpoons() {
   if (!sharedTimer.isExpired()) {
     FOREACH_FACE(f) {
       if (playerRanks[f] == 6) {
-        if (isValueReceivedOnFaceExpired(f) || getSignalState(getLastValueReceivedOnFace(f)) == GO) { // Received next player input
+        if (isValueReceivedOnFaceExpired(f) || getSignalState(f) == GO) { // Received next player input
             playerRanks[f] = masterNextRankToAssign++;
             sharedTimer.set(winnerPendingWaitLength);
         }
         else {
-          playersRemaining++;
+          ++playersRemaining;
           lastPlayerRemaining = f;
         }
       }
@@ -459,8 +459,8 @@ void msSpoons() {
   }
 
   if (playersRemaining == 1) {
-    playerRanks[lastPlayerRemaining] = masterNextRankToAssign++;
-    playersRemaining--;
+    playerRanks[lastPlayerRemaining] = ++masterNextRankToAssign;
+    --playersRemaining;
   }
   if (playersRemaining == 0) {
     sharedTimer.set(masterResultDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
@@ -486,7 +486,7 @@ void msLoser() {
     return;
   }
   FOREACH_FACE(f) {
-    if (!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) == GO && playerRanks[f] == 6) {
+    if (!isValueReceivedOnFaceExpired(f) && getSignalState(f) == GO && playerRanks[f] == 6) {
       playerRanks[f] = 5;
       sharedTimer.set(masterResultDisplayLength);
       setValueSentOnFace((RESOLVE << 1) + 1, f);
@@ -510,7 +510,7 @@ bool isValidPattern() {
 
 // Sets the stored pattern to 99 (init val)
 void resetStoredPattern() {
-    for (byte i=0; i<lastElementsNum; i++) {
+    for (byte i=0; i<lastElementsNum; ++i) {
         lastElements[i][0] = 99;
         lastElements[i][1] = 99;
     }
@@ -560,7 +560,7 @@ void updateSignalPropagation() {
 
 // make color commands propagate regardless of state, reset when signal state is INERT
 bool updatePlayerColor(byte f) {
-  byte c = getColorState(getLastValueReceivedOnFace(f));
+  byte c = getColorState(f);
   if (c > currentPlayerRankSignal && !(overallState == OS_MASTER_STATE && masterState == MS_SETUP_STATE)) {
     currentPlayerRankSignal = c;
     goSignalRecievedFromFace = f;
@@ -568,6 +568,7 @@ bool updatePlayerColor(byte f) {
 }
 
 bool shouldConsiderFace(byte f) { //if adjacent to master, should I prop signals to this face?
+  if (isValueReceivedOnFaceExpired(f)) return false;
   if (adjacentMasterFace == 6) return true;
 
   if (f == adjacentMasterFace
@@ -585,8 +586,8 @@ void inertLoop() {
 
   //listen for neighbors in GO
   FOREACH_FACE(f) {
-    if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
-      if (getSignalState(getLastValueReceivedOnFace(f)) == GO) {//a neighbor saying GO!
+    if (shouldConsiderFace(f)) {//a neighbor!
+      if (getSignalState(f) == GO) {//a neighbor saying GO!
         updatePlayerColor(f);
         signalState = GO;
         runGoBroadcastTimer = true;
@@ -596,32 +597,27 @@ void inertLoop() {
   }
 }
 
-void goLoop() {
-    signalState = RESOLVE; //I default to this at the start of the loop. Only if I see a problem does this not happen
-    
-    //look for neighbors who have not heard the GO news
-    FOREACH_FACE(f) {
-        if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
-            updatePlayerColor(f);
-            if (getSignalState(getLastValueReceivedOnFace(f)) == INERT) {//This neighbor doesn't know it's GO time. Stay in GO
-              signalState = GO;
-            }
-        }
-    }
-}
-
-void resolveLoop() {
-  signalState = INERT;//I default to this at the start of the loop. Only if I see a problem does this not happen
-
-  //look for neighbors who have not moved to RESOLVE
+// Confusing but saves 18 bytes
+void goResolveLoopOptimization(byte a) {
+  signalState = a; //I default to this at the start of the loop. Only if I see a problem does this not happen
+  
+  //look for neighbors who have not heard the GO news
   FOREACH_FACE(f) {
-    if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
+    if (shouldConsiderFace(f)) {//a neighbor!
       updatePlayerColor(f);
-      if (getSignalState(getLastValueReceivedOnFace(f)) == GO) {//This neighbor isn't in RESOLVE. Stay in RESOLVE
-        signalState = RESOLVE;
+      if (getSignalState(f) == (a + 1) % 3) {//This neighbor doesn't know it's GO time. Stay in GO
+        signalState = (a + 2) % 3;
       }
     }
   }
+}
+
+void goLoop() {
+  goResolveLoopOptimization(RESOLVE);
+}
+
+void resolveLoop() {
+  goResolveLoopOptimization(INERT);
 }
 
 void updateAdjacentMasters() {
@@ -656,10 +652,10 @@ void updateMasterSetupState() {
   }
 }
 
-byte getColorState(byte data) {
-  return ((data >> 3) & 7);//returns bits C and D
+byte getColorState(byte f) {
+  return ((getLastValueReceivedOnFace(f) >> 3) & 7);//returns bits C and D
 }
 
-byte getSignalState(byte data) {
-  return ((data >> 1) & 3);//returns bits C and D
+byte getSignalState(byte f) {
+  return ((getLastValueReceivedOnFace(f) >> 1) & 3);//returns bits C and D
 }
