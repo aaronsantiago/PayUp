@@ -136,9 +136,9 @@ void osPlayer() {
   byte connectedFaces = 0;
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f))
-      {
-        connectedFaces++;
-      }
+    {
+      connectedFaces++;
+    }
   }
   if (connectedFaces == 0 && overallState != OS_ALONE_STATE) {
     overallState = OS_ALONE_STATE;
@@ -195,7 +195,7 @@ void lsIdle() {
 }
 
 void lsAnim() {
-  if (sharedTimer.isExpired() && currentPlayerRankCache != RANK_LOSE) {
+  if (sharedTimer.isExpired()) {
     leafState = LS_IDLE_STATE;
     currentPlayerRankCache = 0;
     buttonPressed(); // reset button pressed state before going back to idle
