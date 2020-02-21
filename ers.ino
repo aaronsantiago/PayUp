@@ -17,6 +17,7 @@ const int masterSetupDontSendGoLength = 250;
 const int pipeDisplayLength = 300;
 const int inputDisplayLength = 1000;
 const int playerResultDisplayLength = 300;
+const int randomAloneDeathChance = 3;
 
 
 // **********************************************************************
@@ -56,13 +57,13 @@ const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 byte sendData = 1;
 Timer sharedTimer;
 
-enum overallStateValues {OS_RESET_STATE, OS_PLAYER_STATE, OS_MASTER_STATE, OS_LEAF_STATE, OS_ALONE_STATE, OS_PIPE_STATE};
+enum overallStateValues {OS_RESET_STATE, OS_PLAYER_STATE, OS_MASTER_STATE, OS_LEAF_STATE, OS_ALONE_STATE, OS_PIPE_STATE, OS_DEAD_STATE};
 byte overallState = OS_PLAYER_STATE;
 enum masterStateValues {MS_SETUP_STATE, MS_SPINNER_STATE, MS_SPOONS_STATE, MS_WINNER_STATE, MS_LOSER_STATE};
 byte masterState = MS_SETUP_STATE;
 enum pipeStateValues {PS_IDLE_STATE, PS_ANIM_STATE};
 byte pipeState = PS_IDLE_STATE;
-enum aloneStateValues {AS_IDLE_STATE, AS_ACTIVE_STATE, AS_DEAD_STATE};
+enum aloneStateValues {AS_IDLE_STATE, AS_ACTIVE_STATE};
 byte aloneState = AS_IDLE_STATE;
 enum leafStateValues {LS_IDLE_STATE, LS_ANIM_STATE};
 byte leafState = LS_IDLE_STATE;
@@ -103,6 +104,9 @@ void loop() {
     case OS_PIPE_STATE:
       osPipe();
       break;
+    case OS_DEAD_STATE:
+      osDead();
+      break;
   }
 }
 
@@ -117,6 +121,10 @@ void osReset() {
     sharedTimer.set(resetStateLength);
   }
   setColor(MAGENTA);
+}
+
+void osDead() {
+  setColor(RED);
 }
 
 // *****************************************************************
@@ -140,10 +148,12 @@ void osPlayer() {
   if (connectedFaces == 1 && overallState != OS_LEAF_STATE) {
     overallState = OS_LEAF_STATE;
     leafState = 0; // reset leaf state machine
+    currentPlayerRankCache = 0;
     buttonPressed(); // reset button press checker before going into leaf state
   }
   if (connectedFaces > 1 && overallState != OS_PIPE_STATE) {
     overallState = OS_PIPE_STATE;
+    currentPlayerRankCache = 0;
     pipeState = 0; // reset pipe state machine
   }
 }
@@ -185,7 +195,7 @@ void lsIdle() {
 }
 
 void lsAnim() {
-  if (sharedTimer.isExpired()) {
+  if (sharedTimer.isExpired() && currentPlayerRankCache != RANK_LOSE) {
     leafState = LS_IDLE_STATE;
     currentPlayerRankCache = 0;
     buttonPressed(); // reset button pressed state before going back to idle
@@ -215,14 +225,12 @@ void osAlone() {
     case AS_ACTIVE_STATE:
       asActive();
       break;
-    case AS_DEAD_STATE:
-      // asDead();
-      break;
   }
 }
 
 void asIdle() {
   if (sharedTimer.isExpired()) {
+    if (random(randomAloneDeathChance - 1) == 0) overallState = OS_DEAD_STATE;
     aloneState = AS_ACTIVE_STATE;
     return;
   }
@@ -319,6 +327,7 @@ void msSetup() {
       }
     }
   }
+  setColor(BLUE);
 }
 
 void msSpinner() {
@@ -446,7 +455,6 @@ void msSpoons() {
     sharedTimer.set(masterResultDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
     masterState = MS_WINNER_STATE;
   }
-  setColor(OFF);
   updateSpoonsSignals();
 }
 
@@ -473,7 +481,6 @@ void msLoser() {
       setValueSentOnFace((RESOLVE << 1) + 1, f);
     }
   }
-  setColor(OFF);
   updateSpoonsSignals();
 }
 
