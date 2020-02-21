@@ -9,8 +9,11 @@ const int masterColorSwitchGapLength = 100; // Dark time in between color switch
 
 const int lonePieceActivationMin = 1000;
 const int lonePieceActivationMax = 8000;
-const int masterResultDisplayLength = 2000;
-const int winnerPendingWaitLength = 5000;
+const int masterResultDisplayLength = 1200;
+const int winnerPendingWaitLength = 1200;
+const int resetStateLength = 300;
+const int masterSetupStateLength = 1500;
+const int masterSetupDontSendGoLength = 250;
 const int pipeDisplayLength = 300;
 const int inputDisplayLength = 1000;
 const int playerResultDisplayLength = 300;
@@ -20,7 +23,7 @@ const int playerResultDisplayLength = 300;
 // **** GLOBAL VARIABLES ************************************************
 // **********************************************************************
 
-const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN};
+const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN, MAGENTA};
 const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
 
 
@@ -31,7 +34,7 @@ byte masterValue = 99;
 
 byte adjacentMasterFace = 6;
 
-enum playerRankValues {RANK_NONE, RANK_LOSE, RANK_MID, RANK_WIN};
+enum playerRankValues {RANK_NONE, RANK_LOSE, RANK_MID, RANK_WIN, RANK_RESET};
 const byte masterColorNum = sizeof(masterColors) / sizeof(masterColors[0]);
 const byte masterValues[] = {1, 3, 6};
 const byte masterValuesNum = sizeof(masterValues) / sizeof(masterValues[0]);
@@ -53,13 +56,13 @@ const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 byte sendData = 1;
 Timer sharedTimer;
 
-enum overallStateValues {OS_PLAYER_STATE, OS_MASTER_STATE, OS_LEAF_STATE, OS_ALONE_STATE, OS_PIPE_STATE};
+enum overallStateValues {OS_RESET_STATE, OS_PLAYER_STATE, OS_MASTER_STATE, OS_LEAF_STATE, OS_ALONE_STATE, OS_PIPE_STATE};
 byte overallState = OS_PLAYER_STATE;
-enum masterStateValues {MS_SPINNER_STATE, MS_SPOONS_STATE, MS_WINNER_STATE, MS_LOSER_STATE};
-byte masterState = MS_SPINNER_STATE;
+enum masterStateValues {MS_SETUP_STATE, MS_SPINNER_STATE, MS_SPOONS_STATE, MS_WINNER_STATE, MS_LOSER_STATE};
+byte masterState = MS_SETUP_STATE;
 enum pipeStateValues {PS_IDLE_STATE, PS_ANIM_STATE};
 byte pipeState = PS_IDLE_STATE;
-enum aloneStateValues {AS_IDLE_STATE, AS_ACTIVE_STATE};
+enum aloneStateValues {AS_IDLE_STATE, AS_ACTIVE_STATE, AS_DEAD_STATE};
 byte aloneState = AS_IDLE_STATE;
 enum leafStateValues {LS_IDLE_STATE, LS_ANIM_STATE};
 byte leafState = LS_IDLE_STATE;
@@ -80,7 +83,11 @@ void setup() {
 void loop() {
   updateAdjacentMasters();
   updateSignalPropagation();
+  updateMasterSetupState();
   switch (overallState) {
+    case OS_RESET_STATE:
+      osReset();
+      break;
     case OS_PLAYER_STATE:
       osPlayer();
       break;
@@ -97,6 +104,19 @@ void loop() {
       osPipe();
       break;
   }
+}
+
+void osReset() {
+  if (sharedTimer.isExpired()) {
+    overallState = OS_PLAYER_STATE;
+  }
+  if (currentPlayerRankCache < currentPlayerRankSignal) {
+    currentPlayerRankCache = currentPlayerRankSignal;
+  }
+  if (currentPlayerRankCache == currentPlayerRankSignal && signalState == GO) {
+    sharedTimer.set(resetStateLength);
+  }
+  setColor(MAGENTA);
 }
 
 // *****************************************************************
@@ -131,14 +151,6 @@ void osPlayer() {
 void nonSpinnerStateChecks() {
   // evaluate neighbors
   osPlayer();
-
-  // evaluate switched to master
-  if (buttonLongPressed()) {
-    overallState = OS_MASTER_STATE;
-    masterState = MS_SPINNER_STATE;
-    signalState = RESOLVE; // Don't know if this is the best place for this TODO
-    setColor(RED); // Change the color instantly so that the user knows the master was created. TODO Maybe should flash or rotate or something.
-  }
 }
 
 // *****************************************************************
@@ -203,6 +215,9 @@ void osAlone() {
     case AS_ACTIVE_STATE:
       asActive();
       break;
+    case AS_DEAD_STATE:
+      // asDead();
+      break;
   }
 }
 
@@ -266,12 +281,13 @@ void psAnim() {
 // *****************************************************************
 
 void osMaster() {
-  if (buttonLongPressed()) {
-    overallState = OS_PLAYER_STATE;
-    return;
+  if (masterState != MS_SETUP_STATE) {
+    setValueSentOnAllFaces((INERT << 1) + 1); // master state controls its own signal states
   }
-  setValueSentOnAllFaces((INERT << 1) + 1); // master state controls its own signal states
   switch (masterState) {
+    case MS_SETUP_STATE:
+      msSetup();
+      break;
     case MS_SPINNER_STATE:
       msSpinner();
       break;
@@ -287,7 +303,26 @@ void osMaster() {
   }
 }
 
+void msSetup() {
+  if(sharedTimer.isExpired()) {
+    masterState = MS_SPINNER_STATE;
+    currentPlayerRankSignal = RANK_NONE;
+    return;
+  }
+  if (sharedTimer.getRemaining() > masterSetupDontSendGoLength) {
+    FOREACH_FACE(f) {
+      if(!isValueReceivedOnFaceExpired(f) && getSignalState(getLastValueReceivedOnFace(f)) != RESOLVE) {
+        setValueSentOnFace((RANK_RESET << 3) + (GO << 1) + 1, f);
+      }
+      else {
+        setValueSentOnFace((RESOLVE << 1) + 1, f);
+      }
+    }
+  }
+}
+
 void msSpinner() {
+  currentPlayerRankCache = 0; // Reset rank cache used to track whether to send RANK_RESET
   if (masterColorSwitchTimer.isExpired()) {  // SET NEXT MASTER COLOR
       masterColorIndex = random(masterColorNum - 1);
       masterValue = masterValues[random(masterValuesNum - 1)];
@@ -464,6 +499,7 @@ void resetStoredPattern() {
 }
 
 void displayCombo(Color color, byte value) {
+  setColor(OFF);
     if (value >= 1) {
         setColorOnFace(color, 0);
     }
@@ -506,7 +542,7 @@ void updateSignalPropagation() {
 
 // make color commands propagate regardless of state, reset when signal state is INERT
 void comparePlayerColor(byte c) {
-  if (c > currentPlayerRankSignal) {
+  if (c > currentPlayerRankSignal && !(overallState == OS_MASTER_STATE && masterState == MS_SETUP_STATE)) {
     currentPlayerRankSignal = c;
   }
 }
@@ -580,8 +616,28 @@ void updateAdjacentMasters() {
   }
 }
 
+void updateMasterSetupState() {
+  if (overallState != OS_RESET_STATE
+      && !(overallState == OS_MASTER_STATE && masterState == MS_SETUP_STATE)
+      && currentPlayerRankSignal == RANK_RESET) {
+    overallState = OS_RESET_STATE;
+    signalState = GO;
+    currentPlayerRankSignal = RANK_RESET;
+    sharedTimer.set(resetStateLength);
+  }
+  // evaluate switched to master
+  if (buttonMultiClicked()) {
+    overallState = OS_MASTER_STATE;
+    masterState = MS_SETUP_STATE;
+    signalState = GO; // Don't know if this is the best place for this TODO
+    currentPlayerRankSignal = RANK_RESET;
+    sharedTimer.set(masterSetupStateLength);
+    setColor(MAGENTA); // Change the color instantly so that the user knows the master was created. TODO Maybe should flash or rotate or something.
+  }
+}
+
 byte getColorState(byte data) {
-  return ((data >> 3) & 3);//returns bits C and D
+  return ((data >> 3) & 7);//returns bits C and D
 }
 
 byte getSignalState(byte data) {
