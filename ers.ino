@@ -3,9 +3,8 @@
 // **********************************************************************
 // **** TUNABLE CONSTANTS ***********************************************
 // **********************************************************************
-const int masterColorSwitchLengthDefault = 1200;
-const int masterColorSwitchDelta = 0;
 const int masterColorSwitchGapLength = 100; // Dark time in between color switches
+const int masterColorSwitchLength = 1200;
 
 const int lonePieceActivationMin = 1000;
 const int lonePieceActivationMax = 8000;
@@ -17,7 +16,6 @@ const int masterSetupDontSendGoLength = 250;
 const int pipeDisplayLength = 500;
 const int pipePropagationAnimationLength = 50;
 const int inputDisplayLength = 1000;
-const int playerResultDisplayLength = 500;
 const int randomAloneDeathChance = 3;
 
 
@@ -27,9 +25,6 @@ const int randomAloneDeathChance = 3;
 
 const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN, MAGENTA};
 const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
-
-
-int masterColorSwitchLength = masterColorSwitchLengthDefault; // Slowly decrease
 
 byte masterColorIndex = 0;
 byte masterValue = 99;
@@ -162,14 +157,19 @@ void osPlayer() {
   }
 }
 
-void nonSpinnerStateChecks() {
-  // evaluate neighbors
-  osPlayer();
-}
-
 void pipeRender(int b) {
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f)) setColorOnFace(dim(WHITE, b), f);
+  }
+}
+
+void pipeAnimRender() {
+  if (currentPlayerRankCache < currentPlayerRankSignal) {
+    currentPlayerRankCache = currentPlayerRankSignal;
+    sharedAnimationTimer.set(pipePropagationAnimationLength);
+  }
+  if (currentPlayerRankCache == currentPlayerRankSignal && signalState == GO) {
+    sharedTimer.set(pipeDisplayLength);
   }
 }
 
@@ -179,7 +179,7 @@ void pipeRender(int b) {
 
 
 void osLeaf() {
-  nonSpinnerStateChecks();
+  osPlayer();
   if (overallState != OS_LEAF_STATE) return;
   switch (leafState) {
     case LS_IDLE_STATE:
@@ -198,7 +198,7 @@ void lsIdle() {
   }
   if (signalState == GO) {
     leafState = LS_ANIM_STATE;
-    sharedTimer.set(playerResultDisplayLength);
+    sharedTimer.set(pipeDisplayLength);
     return;
   }
   if (currentPlayerRankCache == RANK_NONE) {
@@ -215,12 +215,7 @@ void lsAnim() {
     buttonPressed(); // reset button pressed state before going back to idle
     return;
   }
-  if (currentPlayerRankCache < currentPlayerRankSignal) {
-    currentPlayerRankCache = currentPlayerRankSignal;
-  }
-  if (currentPlayerRankCache == currentPlayerRankSignal && signalState == GO) {
-    sharedTimer.set(playerResultDisplayLength);
-  }
+  pipeAnimRender();
   setColor(playerRankColors[currentPlayerRankCache]);
 }
 
@@ -230,7 +225,7 @@ void lsAnim() {
 // *****************************************************************
 
 void osAlone() {
-  nonSpinnerStateChecks();
+  osPlayer();
   if (overallState != OS_ALONE_STATE) return;
   switch (aloneState) {
     case AS_IDLE_STATE:
@@ -262,7 +257,7 @@ void asActive() {
 
 
 void osPipe() {
-  nonSpinnerStateChecks();
+  osPlayer();
   if (overallState != OS_PIPE_STATE) return;
   switch(pipeState) {
     case PS_IDLE_STATE:
@@ -292,13 +287,7 @@ void psAnim() {
     currentPlayerRankCache = 0;
     return;
   }
-  if (currentPlayerRankCache < currentPlayerRankSignal) {
-    currentPlayerRankCache = currentPlayerRankSignal;
-    sharedAnimationTimer.set(pipePropagationAnimationLength);
-  }
-  if (currentPlayerRankCache == currentPlayerRankSignal && signalState == GO) {
-    sharedTimer.set(pipeDisplayLength);
-  }
+  pipeAnimRender();
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f)) {
       setColorOnFace(playerRankColors[currentPlayerRankCache], f);
@@ -370,8 +359,6 @@ void msSpinner() {
       lastElements[0][1] = masterValue;
 
       masterColorSwitchTimer.set(masterColorSwitchLength);
-
-      masterColorSwitchLength = masterColorSwitchLength - masterColorSwitchDelta; // Slowly decrease
       spinnerOffset = random(5);
   } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
       displayCombo(dim(masterColors[masterColorIndex],
@@ -386,20 +373,18 @@ void msSpinner() {
         && getSignalState(getLastValueReceivedOnFace(f)) == GO) {
       if (getColorState(getLastValueReceivedOnFace(f)) == RANK_NONE) {
           // Received first player input
-        // Check if valid hit
-        bool isPlayerWin = isValidPattern();
 
         // initialize ranking system
         masterNextRankToAssign = 1;
         numPlayersAtInputTime = 0;
-        for (byte i = 0; i < 6; i++) {
+        FOREACH_FACE(i) {
           playerRanks[i] = 7;
           if (!isValueReceivedOnFaceExpired(i)) {
             numPlayersAtInputTime++;
             playerRanks[i] = 6;
           }
         }
-        if (isPlayerWin) {
+        if (isValidPattern()) {
           playerRanks[f] = 0;
           masterState = MS_SPOONS_STATE;
           sharedTimer.set(winnerPendingWaitLength);
@@ -409,8 +394,6 @@ void msSpinner() {
           masterState = MS_LOSER_STATE;
           sharedTimer.set(masterResultDisplayLength);
         }
-
-        masterColorSwitchLength = masterColorSwitchLengthDefault; // reset switch length
         
         // reset pattern memory
         resetStoredPattern();
@@ -670,7 +653,6 @@ void updateMasterSetupState() {
     signalState = GO; // Don't know if this is the best place for this TODO
     currentPlayerRankSignal = RANK_RESET;
     sharedTimer.set(masterSetupStateLength);
-    setColor(MAGENTA); // Change the color instantly so that the user knows the master was created. TODO Maybe should flash or rotate or something.
   }
 }
 
