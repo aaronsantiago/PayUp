@@ -14,9 +14,10 @@ const int winnerPendingWaitLength = 1200;
 const int resetStateLength = 300;
 const int masterSetupStateLength = 1500;
 const int masterSetupDontSendGoLength = 250;
-const int pipeDisplayLength = 300;
+const int pipeDisplayLength = 500;
+const int pipePropagationAnimationLength = 50;
 const int inputDisplayLength = 1000;
-const int playerResultDisplayLength = 300;
+const int playerResultDisplayLength = 500;
 const int randomAloneDeathChance = 3;
 
 
@@ -56,6 +57,9 @@ const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 
 byte sendData = 1;
 Timer sharedTimer;
+Timer sharedAnimationTimer;
+byte spinnerOffset = 0;
+byte goSignalRecievedFromFace = 0;
 
 enum overallStateValues {OS_RESET_STATE, OS_PLAYER_STATE, OS_MASTER_STATE, OS_LEAF_STATE, OS_ALONE_STATE, OS_PIPE_STATE, OS_DEAD_STATE};
 byte overallState = OS_PLAYER_STATE;
@@ -163,6 +167,12 @@ void nonSpinnerStateChecks() {
   osPlayer();
 }
 
+void pipeRender(int b) {
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f)) setColorOnFace(dim(WHITE, b), f);
+  }
+}
+
 // *****************************************************************
 // ******* LEAF STATE **********************************************
 // *****************************************************************
@@ -191,7 +201,11 @@ void lsIdle() {
     sharedTimer.set(playerResultDisplayLength);
     return;
   }
-  setColor(WHITE);
+  if (currentPlayerRankCache == RANK_NONE) {
+    setColor(dim(GREEN, 128));
+  }
+  pipeRender(255);
+  setColorOnFace(GREEN, random(5));
 }
 
 void lsAnim() {
@@ -235,10 +249,11 @@ void asIdle() {
     return;
   }
   setColor(OFF);
+  setColorOnFace(dim(GREEN, 128), (sharedTimer.getRemaining()/90) % 6);
 }
 
 void asActive() {
-  setColor(WHITE);
+  setColor(GREEN);
 }
 
 // *****************************************************************
@@ -263,10 +278,12 @@ void psIdle() {
   if (signalState == GO) {
     pipeState = PS_ANIM_STATE;
     sharedTimer.set(pipeDisplayLength);
+    sharedAnimationTimer.set(pipePropagationAnimationLength);
     return;
   }
   currentPlayerRankCache = 0;
   setColor(OFF);
+  pipeRender(128);
 }
 
 void psAnim() {
@@ -277,11 +294,19 @@ void psAnim() {
   }
   if (currentPlayerRankCache < currentPlayerRankSignal) {
     currentPlayerRankCache = currentPlayerRankSignal;
+    sharedAnimationTimer.set(pipePropagationAnimationLength);
   }
   if (currentPlayerRankCache == currentPlayerRankSignal && signalState == GO) {
     sharedTimer.set(pipeDisplayLength);
   }
-  setColor(playerRankColors[currentPlayerRankCache]);
+  FOREACH_FACE(f) {
+    if (!isValueReceivedOnFaceExpired(f) && shouldConsiderFace(f)) {
+      setColorOnFace(playerRankColors[currentPlayerRankCache], f);
+      if (f != goSignalRecievedFromFace && !sharedAnimationTimer.isExpired()) {
+        setColorOnFace(dim(WHITE, 128), f);
+      }
+    }
+  }
 }
 
 // *****************************************************************
@@ -344,14 +369,17 @@ void msSpinner() {
       lastElements[0][0] = masterColorIndex; // Overwrite first element with newest one
       lastElements[0][1] = masterValue;
 
-      displayCombo(masterColors[masterColorIndex], masterValue);
       masterColorSwitchTimer.set(masterColorSwitchLength);
 
       masterColorSwitchLength = masterColorSwitchLength - masterColorSwitchDelta; // Slowly decrease
-      
+      spinnerOffset = random(5);
   } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
-      setColor(OFF);
+      displayCombo(dim(masterColors[masterColorIndex],
+        masterColorSwitchTimer.getRemaining() * 255 /masterColorSwitchGapLength), masterValue);
   } 
+  else {
+    displayCombo(masterColors[masterColorIndex], masterValue);
+  }
 
   FOREACH_FACE(f) {
     if (!isValueReceivedOnFaceExpired(f)
@@ -507,15 +535,15 @@ void resetStoredPattern() {
 
 void displayCombo(Color color, byte value) {
   setColor(OFF);
-    if (value >= 1) {
-        setColorOnFace(color, 0);
-    }
-    if (value >= 3) {
-        setColorOnFace(color, 2);
-    }
-    if (value >= 6) {
-        setColorOnFace(color, 4);
-    }
+  if (value >= 1) {
+      setColorOnFace(color, (0 + spinnerOffset) % 6);
+  }
+  if (value >= 3) {
+      setColorOnFace(color, (2 + spinnerOffset) % 6);
+  }
+  if (value >= 6) {
+      setColorOnFace(color, (4 + spinnerOffset) % 6);
+  }
 }
 
 // *****************************************************************
@@ -548,9 +576,11 @@ void updateSignalPropagation() {
 }
 
 // make color commands propagate regardless of state, reset when signal state is INERT
-void comparePlayerColor(byte c) {
+bool updatePlayerColor(byte f) {
+  byte c = getColorState(getLastValueReceivedOnFace(f));
   if (c > currentPlayerRankSignal && !(overallState == OS_MASTER_STATE && masterState == MS_SETUP_STATE)) {
     currentPlayerRankSignal = c;
+    goSignalRecievedFromFace = f;
   }
 }
 
@@ -574,9 +604,10 @@ void inertLoop() {
   FOREACH_FACE(f) {
     if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
       if (getSignalState(getLastValueReceivedOnFace(f)) == GO) {//a neighbor saying GO!
-        comparePlayerColor(getColorState(getLastValueReceivedOnFace(f)));
+        updatePlayerColor(f);
         signalState = GO;
         runGoBroadcastTimer = true;
+        goSignalRecievedFromFace = f;
       }
     }
   }
@@ -588,7 +619,7 @@ void goLoop() {
     //look for neighbors who have not heard the GO news
     FOREACH_FACE(f) {
         if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
-            comparePlayerColor(getColorState(getLastValueReceivedOnFace(f)));
+            updatePlayerColor(f);
             if (getSignalState(getLastValueReceivedOnFace(f)) == INERT) {//This neighbor doesn't know it's GO time. Stay in GO
               signalState = GO;
             }
@@ -602,7 +633,7 @@ void resolveLoop() {
   //look for neighbors who have not moved to RESOLVE
   FOREACH_FACE(f) {
     if (shouldConsiderFace(f) && !isValueReceivedOnFaceExpired(f)) {//a neighbor!
-      comparePlayerColor(getColorState(getLastValueReceivedOnFace(f)));
+      updatePlayerColor(f);
       if (getSignalState(getLastValueReceivedOnFace(f)) == GO) {//This neighbor isn't in RESOLVE. Stay in RESOLVE
         signalState = RESOLVE;
       }
