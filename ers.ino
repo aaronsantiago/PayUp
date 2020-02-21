@@ -124,6 +124,8 @@ void osReset() {
 
 void osDead() {
   setColor(RED);
+  glitchRender(RED);
+  glitchRender(RED);
 }
 
 // *****************************************************************
@@ -173,6 +175,10 @@ void pipeAnimRender() {
   }
 }
 
+void glitchRender(Color color) {
+  setColorOnFace(dim(color, 64), random(5));
+}
+
 // *****************************************************************
 // ******* LEAF STATE **********************************************
 // *****************************************************************
@@ -217,6 +223,7 @@ void lsAnim() {
   }
   pipeAnimRender();
   setColor(playerRankColors[currentPlayerRankCache]);
+  glitchRender(playerRankColors[currentPlayerRankCache]);
 }
 
 
@@ -249,6 +256,8 @@ void asIdle() {
 
 void asActive() {
   setColor(GREEN);
+  glitchRender(GREEN);
+  glitchRender(GREEN);
 }
 
 // *****************************************************************
@@ -475,7 +484,7 @@ void msWinner() {
     return;
   }
   FOREACH_FACE(f) {
-    setColorOnFace(masterColors[random(masterColorNum - 1)], f);
+    setColorOnFace(dim(masterColors[random(masterColorNum - 1)], sharedTimer.getRemaining() * 255 / masterResultDisplayLength), f);
   }
   updateSpoonsSignals();
 }
