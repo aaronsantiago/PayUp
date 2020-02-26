@@ -129,8 +129,6 @@ void osReset() {
 
 void osDead() {
   setColor(RED);
-  glitchRender(RED);
-  glitchRender(RED);
 }
 
 // *****************************************************************
@@ -181,10 +179,6 @@ void pipeAnimRender() {
   }
 }
 
-void glitchRender(Color color) {
-  setColorOnFace(dim(color, 64), random(5));
-}
-
 // *****************************************************************
 // ******* LEAF STATE **********************************************
 // *****************************************************************
@@ -222,8 +216,6 @@ void lsIdle() {
   if (currentPlayerRankCache == RANK_NONE) {
     setColor(dim(GREEN, 128));
   }
-  pipeRender(255);
-  setColorOnFace(GREEN, random(5));
 }
 
 void lsAnim() {
@@ -236,7 +228,6 @@ void lsAnim() {
   }
   pipeAnimRender();
   setColor(playerRankColors[currentPlayerRankCache]);
-  glitchRender(playerRankColors[currentPlayerRankCache]);
 }
 
 
@@ -263,14 +254,11 @@ void asIdle() {
     aloneState = AS_ACTIVE_STATE;
     return;
   }
-  setColor(OFF);
-  setColorOnFace(dim(GREEN, 128), (sharedTimer.getRemaining()/90) % 6);
+  setColor(dim(GREEN, 64));
 }
 
 void asActive() {
   setColor(GREEN);
-  glitchRender(GREEN);
-  glitchRender(GREEN);
 }
 
 // *****************************************************************
@@ -385,8 +373,7 @@ void msSpinner() {
       if (masterColorSwitchLength < masterColorSwitchLengthMin) masterColorSwitchLength = masterColorSwitchLengthMin;
       spinnerOffset = random(5);
   } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
-      displayCombo(dim(masterColors[masterColorIndex],
-        masterColorSwitchTimer.getRemaining() * 255 /masterColorSwitchGapLength), masterValue);
+    setColor(OFF);
   } 
   else {
     displayCombo(masterColors[masterColorIndex], masterValue);
@@ -498,9 +485,7 @@ void msWinner() {
     masterState = MS_SPINNER_STATE;
     return;
   }
-  FOREACH_FACE(f) {
-    setColorOnFace(dim(masterColors[random(masterColorNum - 1)], sharedTimer.getRemaining() * 255 / masterResultDisplayLength), f);
-  }
+  setColor(masterColors[random(masterColorNum - 1)]));
   updateSpoonsSignals();
 }
 
