@@ -4,12 +4,14 @@
 // **** TUNABLE CONSTANTS ***********************************************
 // **********************************************************************
 const int masterColorSwitchGapLength = 100; // Dark time in between color switches
-const int masterColorSwitchLength = 1200;
+const int masterColorSwitchLengthMax = 1200;
+const int masterColorSwitchLengthDelta = 10;
+const int masterColorSwitchLengthMin = 600;
 
 const int lonePieceActivationMin = 1000;
 const int lonePieceActivationMax = 8000;
 const int masterResultDisplayLength = 1200;
-const int winnerPendingWaitLength = 1200;
+const int winnerPendingWaitLength = 2000;
 const int resetStateLength = 300;
 const int masterSetupStateLength = 1500;
 const int masterSetupDontSendGoLength = 250;
@@ -17,7 +19,7 @@ const int pipeDisplayLength = 500;
 const int pipePropagationAnimationLength = 50;
 const int inputDisplayLength = 1000;
 const int randomAloneDeathChance = 3;
-
+const int goDelay = 45;
 
 // **********************************************************************
 // **** GLOBAL VARIABLES ************************************************
@@ -28,6 +30,7 @@ const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
 
 byte masterColorIndex = 0;
 byte masterValue = 99;
+int masterColorSwitchLength = masterColorSwitchLengthMax;
 
 byte adjacentMasterFace = 6;
 
@@ -53,6 +56,8 @@ const int lastElementsNum = sizeof(lastElements) / sizeof(lastElements[0]);
 byte sendData = 1;
 Timer sharedTimer;
 Timer sharedAnimationTimer;
+Timer goDelayTimer;
+bool goBuffered = false;
 byte spinnerOffset = 0;
 byte goSignalRecievedFromFace = 0;
 
@@ -150,6 +155,7 @@ void osPlayer() {
     overallState = OS_LEAF_STATE;
     leafState = 0; // reset leaf state machine
     currentPlayerRankCache = 0;
+    goBuffered = false;
     buttonPressed(); // reset button press checker before going into leaf state
   }
   if (connectedFaces > 1 && overallState != OS_PIPE_STATE) {
@@ -198,9 +204,15 @@ void osLeaf() {
 }
 
 void lsIdle() {
-  if (buttonPressed()) {
+  bool pressed = buttonPressed();
+  if ((pressed && adjacentMasterFace == 6) || (goBuffered && goDelayTimer.isExpired())) {
     signalState = GO;
     currentPlayerRankSignal = RANK_NONE;
+    goBuffered = false;
+  }
+  else if (pressed && !goBuffered && goDelayTimer.isExpired() && adjacentMasterFace < 6) {
+    goDelayTimer.set(goDelay);
+    goBuffered = true;
   }
   if (signalState == GO) {
     leafState = LS_ANIM_STATE;
@@ -218,6 +230,7 @@ void lsAnim() {
   if (sharedTimer.isExpired()) {
     leafState = LS_IDLE_STATE;
     currentPlayerRankCache = 0;
+    goBuffered = false;
     buttonPressed(); // reset button pressed state before going back to idle
     return;
   }
@@ -368,6 +381,8 @@ void msSpinner() {
       lastElements[0][1] = masterValue;
 
       masterColorSwitchTimer.set(masterColorSwitchLength);
+      masterColorSwitchLength -= masterColorSwitchLengthDelta;
+      if (masterColorSwitchLength < masterColorSwitchLengthMin) masterColorSwitchLength = masterColorSwitchLengthMin;
       spinnerOffset = random(5);
   } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
       displayCombo(dim(masterColors[masterColorIndex],
@@ -397,6 +412,7 @@ void msSpinner() {
           playerRanks[f] = 0;
           masterState = MS_SPOONS_STATE;
           sharedTimer.set(winnerPendingWaitLength);
+          resetStoredPattern();
         }
         else {
           playerRanks[f] = 5;
@@ -405,7 +421,6 @@ void msSpinner() {
         }
         
         // reset pattern memory
-        resetStoredPattern();
 
         break;
       }
@@ -657,6 +672,7 @@ void updateMasterSetupState() {
     masterState = MS_SETUP_STATE;
     signalState = GO; // Don't know if this is the best place for this TODO
     currentPlayerRankSignal = RANK_RESET;
+    masterColorSwitchLength = masterColorSwitchLengthMax;
     sharedTimer.set(masterSetupStateLength);
   }
 }
