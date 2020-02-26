@@ -485,7 +485,7 @@ void msWinner() {
     masterState = MS_SPINNER_STATE;
     return;
   }
-  setColor(masterColors[random(masterColorNum - 1)]));
+  setColor(masterColors[random(masterColorNum - 1)]);
   updateSpoonsSignals();
 }
 
