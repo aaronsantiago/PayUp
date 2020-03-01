@@ -4,9 +4,15 @@
 // **** TUNABLE CONSTANTS ***********************************************
 // **********************************************************************
 const int masterColorSwitchGapLength = 100; // Dark time in between color switches
-const int masterColorSwitchLengthMax = 1200;
-const int masterColorSwitchLengthDelta = 10;
-const int masterColorSwitchLengthMin = 600;
+const int masterColorSwitchLengthMin = 600; // 600
+const int masterColorSwitchLengthMax = 1200; // 1200
+const int masterColorSwitchLengthDelta = 100;
+
+const int phaseDurations[] = {40, 25, 5, 15, 8};
+const int phaseDeltas[] = {-15, 0, 80, 0, -50};
+const int phaseDurations_v0[] = {20, 8, 5, 5, 8};
+const int phaseDeltas_v0[] = {-30, 0, 80, 0, -50};
+const int numPhases = sizeof(phaseDeltas) / sizeof(phaseDeltas[0]);
 
 const int lonePieceActivationMin = 1000;
 const int lonePieceActivationMax = 8000;
@@ -22,17 +28,24 @@ const int inputDisplayLength = 1000;
 const int randomAloneDeathChance = 3;
 const int goDelay = 45;
 
+// Have direction and step size. Every master spin add step_size * direction. If master spin timer is greater
+// or less than bounds then change direction.
+
 // **********************************************************************
 // **** GLOBAL VARIABLES ************************************************
 // **********************************************************************
 
 const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN, MAGENTA};
 // const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
-const Color masterColors[] = { CYAN, MAGENTA, YELLOW, RED, GREEN};
+const Color masterColors[] = {CYAN, MAGENTA, YELLOW, RED, GREEN};
 
 byte masterColorIndex = 0;
 byte masterValue = 99;
 int masterColorSwitchLength = masterColorSwitchLengthMax;
+
+// int masterColorSwitchLengthDirection = -1;
+int phaseIndex = 0;
+int phaseStepsTaken = 0;
 
 byte adjacentMasterFace = 6;
 
@@ -383,13 +396,36 @@ void msSpinner() {
       lastElements[0][1] = masterValue;
 
       masterColorSwitchTimer.set(masterColorSwitchLength);
-      masterColorSwitchLength -= masterColorSwitchLengthDelta;
+
+      if (phaseStepsTaken >= phaseDurations[phaseIndex]) {
+          // After the first run through the phases, skip the first initial extra slow stage
+          // Assuming 4 phases
+          // 0 -> 1
+          // 1 -> 2
+          // 2 -> 3
+          // 3 -> 1
+          phaseIndex = (phaseIndex % (numPhases - 1)) + 1;
+          phaseStepsTaken = 0;
+      }
+
+      // masterColorSwitchLength TODO maybe this variable can be removed
+      masterColorSwitchLength += phaseDeltas[phaseIndex];
+      phaseStepsTaken += 1;
+
+      // masterColorSwitchLength -= masterColorSwitchLengthDelta;
+
+      // masterColorSwitchLength += masterColorSwitchLengthDelta * masterColorSwitchLengthDirection;
+      // if (masterColorSwitchLength < masterColorSwitchLengthMin || masterColorSwitchLength > masterColorSwitchLengthMax) {
+      //     masterColorSwitchLengthDirection *= -1;
+      // }
+
       if (masterColorSwitchLength < masterColorSwitchLengthMin) masterColorSwitchLength = masterColorSwitchLengthMin;
       spinnerOffset = random(5);
   } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
-      //displayCombo(dim(masterColors[masterColorIndex],
-      //  masterColorSwitchTimer.getRemaining() * 255 /masterColorSwitchGapLength), masterValue);
-      displayCombo(masterColors[masterColorIndex], masterValue);
+      displayCombo(dim(masterColors[masterColorIndex],
+        masterColorSwitchTimer.getRemaining() * 255 /masterColorSwitchGapLength), masterValue);
+      // displayCombo(masterColors[masterColorIndex], masterValue); // TODO Remove, need dimming on master or repeat combos are 
+      // indistinguishable.
   } 
   else {
     displayCombo(masterColors[masterColorIndex], masterValue);
@@ -679,6 +715,9 @@ void updateMasterSetupState() {
     currentPlayerRankSignal = RANK_RESET;
     masterColorSwitchLength = masterColorSwitchLengthMax;
     sharedTimer.set(masterSetupStateLength);
+
+    phaseIndex = 0;
+    phaseStepsTaken = 0;
   }
 }
 
