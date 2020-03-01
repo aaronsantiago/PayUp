@@ -10,8 +10,8 @@ const int masterColorSwitchLengthMin = 600;
 
 const int lonePieceActivationMin = 1000;
 const int lonePieceActivationMax = 8000;
-const int masterResultDisplayLength = 5000;
-const int loserResultDisplayLength = 1200;
+const int masterResultDisplayLength = 4500;
+const int loserResultDisplayLength = 2000;
 const int winnerPendingWaitLength = 2000;
 const int resetStateLength = 300;
 const int masterSetupStateLength = 1500;
@@ -27,7 +27,8 @@ const int goDelay = 45;
 // **********************************************************************
 
 const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN, MAGENTA};
-const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
+// const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
+const Color masterColors[] = { CYAN, MAGENTA, YELLOW, RED, GREEN};
 
 byte masterColorIndex = 0;
 byte masterValue = 99;
@@ -265,7 +266,7 @@ void asIdle() {
     return;
   }
   setColor(OFF);
-  setColorOnFace(dim(GREEN, 128), (sharedTimer.getRemaining()/90) % 6);
+  setColorOnFace(dim(YELLOW, 128), (sharedTimer.getRemaining()/90) % 6);
 }
 
 void asActive() {
@@ -386,8 +387,9 @@ void msSpinner() {
       if (masterColorSwitchLength < masterColorSwitchLengthMin) masterColorSwitchLength = masterColorSwitchLengthMin;
       spinnerOffset = random(5);
   } else if (masterColorSwitchTimer.getRemaining() < masterColorSwitchGapLength) { // Blink off for a bit
-      displayCombo(dim(masterColors[masterColorIndex],
-        masterColorSwitchTimer.getRemaining() * 255 /masterColorSwitchGapLength), masterValue);
+      //displayCombo(dim(masterColors[masterColorIndex],
+      //  masterColorSwitchTimer.getRemaining() * 255 /masterColorSwitchGapLength), masterValue);
+      displayCombo(masterColors[masterColorIndex], masterValue);
   } 
   else {
     displayCombo(masterColors[masterColorIndex], masterValue);
@@ -501,7 +503,8 @@ void msWinner() {
     return;
   }
   FOREACH_FACE(f) {
-    setColorOnFace(dim(masterColors[random(masterColorNum - 1)], sharedTimer.getRemaining() * 255 / masterResultDisplayLength), f);
+    //setColorOnFace(dim(masterColors[random(masterColorNum - 1)], sharedTimer.getRemaining() * 255 / masterResultDisplayLength), f);
+    setColorOnFace(masterColors[random(masterColorNum - 1)], f);
   }
   updateSpoonsSignals();
 }
