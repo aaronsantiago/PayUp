@@ -10,7 +10,8 @@ const int masterColorSwitchLengthMin = 600;
 
 const int lonePieceActivationMin = 1000;
 const int lonePieceActivationMax = 8000;
-const int masterResultDisplayLength = 1200;
+const int masterResultDisplayLength = 5000;
+const int loserResultDisplayLength = 1200;
 const int winnerPendingWaitLength = 2000;
 const int resetStateLength = 300;
 const int masterSetupStateLength = 1500;
@@ -417,7 +418,7 @@ void msSpinner() {
         else {
           playerRanks[f] = 5;
           masterState = MS_LOSER_STATE;
-          sharedTimer.set(masterResultDisplayLength);
+          sharedTimer.set(loserResultDisplayLength);
         }
         
         // reset pattern memory
@@ -487,6 +488,7 @@ void msSpoons() {
     --playersRemaining;
   }
   if (playersRemaining == 0) {
+    buttonPressed();
     sharedTimer.set(masterResultDisplayLength); // TODO This technically isn't winner display timer because it also displays mistakes
     masterState = MS_WINNER_STATE;
   }
@@ -494,7 +496,7 @@ void msSpoons() {
 }
 
 void msWinner() {
-  if (sharedTimer.isExpired()) {
+  if (sharedTimer.isExpired() || buttonPressed()) {
     masterState = MS_SPINNER_STATE;
     return;
   }
