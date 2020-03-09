@@ -25,8 +25,9 @@ const int masterSetupDontSendGoLength = 250;
 const int pipeDisplayLength = 500;
 const int pipePropagationAnimationLength = 50;
 const int inputDisplayLength = 1000;
-const int randomAloneDeathChance = 3;
+const int randomAloneDeathChance = 5;
 const int goDelay = 45;
+const int PIPE_BRIGHTNESS = 64;
 
 // Have direction and step size. Every master spin add step_size * direction. If master spin timer is greater
 // or less than bounds then change direction.
@@ -180,9 +181,9 @@ void osPlayer() {
   }
 }
 
-void pipeRender(int b) {
+void pipeRender() {
   FOREACH_FACE(f) {
-    if (shouldConsiderFace(f)) setColorOnFace(dim(WHITE, b), f);
+    if (shouldConsiderFace(f)) setColorOnFace(dim(WHITE, PIPE_BRIGHTNESS), f);
   }
 }
 
@@ -237,7 +238,7 @@ void lsIdle() {
   if (currentPlayerRankCache == RANK_NONE) {
     setColor(dim(GREEN, 128));
   }
-  pipeRender(255);
+  pipeRender();
   setColorOnFace(GREEN, random(5));
 }
 
@@ -315,7 +316,7 @@ void psIdle() {
   }
   currentPlayerRankCache = 0;
   setColor(OFF);
-  pipeRender(128);
+  pipeRender();
 }
 
 void psAnim() {
