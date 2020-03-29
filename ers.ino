@@ -38,7 +38,7 @@ const int PIPE_BRIGHTNESS = 64;
 
 const Color playerRankColors[] = {WHITE, RED, YELLOW, GREEN, MAGENTA};
 // const Color masterColors[] = { RED, GREEN, BLUE , YELLOW, WHITE};
-const Color masterColors[] = {CYAN, MAGENTA, YELLOW, RED, GREEN};
+const Color masterColors[] = {CYAN, MAGENTA, YELLOW};
 
 byte masterColorIndex = 0;
 byte masterValue = 99;
@@ -51,14 +51,14 @@ int phaseStepsTaken = 0;
 byte adjacentMasterFace = 6;
 
 enum playerRankValues {RANK_NONE, RANK_LOSE, RANK_MID, RANK_WIN, RANK_RESET};
-const byte masterColorNum = sizeof(masterColors) / sizeof(masterColors[0]);
-const byte masterValues[] = {1, 3, 6};
-const byte masterValuesNum = sizeof(masterValues) / sizeof(masterValues[0]);
+const byte masterColorNum = 3;
+const byte masterValues[] = {6};
+const byte masterValuesNum = 1;
 
 // Stores most recent pattern elements. Most recent is on the left.
-byte lastElements[3][2] = { {99,99}, // Color index, number
+byte lastElements[3][2] = {{99,99}, // Color index, number
                            {99,99},
-                           {99,99} };
+                           {99,99}};
 
 byte playerRanks[] = {6,6,6,6,6,6};
 byte numPlayersAtInputTime = 0;
@@ -709,7 +709,7 @@ void updateMasterSetupState() {
     sharedTimer.set(resetStateLength);
   }
   // evaluate switched to master
-  if (buttonMultiClicked()) {
+  if (buttonLongPressed()) {
     overallState = OS_MASTER_STATE;
     masterState = MS_SETUP_STATE;
     signalState = GO; // Don't know if this is the best place for this TODO
